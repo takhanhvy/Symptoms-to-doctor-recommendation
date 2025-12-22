@@ -4,10 +4,9 @@
 Ce projet s’inscrit dans le cadre du **Projet Agent Intelligent Sémantique et Génératif)** du cursus *Data Engineering & AI*.  
 Il vise à développer une application web intelligente permettant d’orienter un utilisateur vers une spécialité médicale adaptée, à partir d’une description en langage naturel de ses symptômes.
 
-**Important** :  
+**** Important** :  
 Ce système **ne fournit pas de diagnostic médical**. Il s’agit uniquement d’un outil d’orientation indicative.
 
----
 
 ## Objectifs
 - Analyser des symptômes décrits en texte libre
@@ -17,7 +16,6 @@ Ce système **ne fournit pas de diagnostic médical**. Il s’agit uniquement d�
 - Détecter les red flags (signaux d’alerte) nécessitant une consultation rapide
 - Générer une explication pédagogique via une IA générative (usage limité et contrôlé)
 
----
 
 ## Architecture globale (Mini-Agent RAG)
 
