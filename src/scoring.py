@@ -75,20 +75,49 @@ def duration_factor(duration: str) -> float:
     return mapping.get(duration, 1.0)
 
 
-def weighted_score(similarity: float, intensity: int, duration: str, location: str) -> float:
+def weighted_score(similarity: float, intensity: int, duration: str, locations) -> float:
     intensity_factor = 0.85 + 0.05 * intensity
     duration_weight = duration_factor(duration)
-    location_factor = 1.05 if location.strip() else 1.0
+    location_items = []
+    if isinstance(locations, str):
+        location_items = [loc.strip().lower() for loc in locations.split(",") if loc.strip()]
+    elif isinstance(locations, list):
+        location_items = [str(loc).strip().lower() for loc in locations if str(loc).strip()]
+
+    specific_locations = [
+        loc for loc in location_items if loc and loc != "generalized / whole body"
+    ]
+    if not specific_locations:
+        location_factor = 1.0
+    else:
+        location_factor = min(1.1, 1.05 + 0.02 * max(0, len(specific_locations) - 1))
     return similarity * intensity_factor * duration_weight * location_factor
 
 
 def build_user_text(payload: dict) -> str:
     parts = [
         payload.get("description", ""),
-        payload.get("context", ""),
-        payload.get("location", ""),
         payload.get("duration", ""),
     ]
+    trigger = payload.get("trigger_factor", "")
+    if trigger:
+        parts.append(trigger)
+    trigger_details = payload.get("trigger_details", "")
+    if trigger_details:
+        parts.append(trigger_details)
+    history = payload.get("medical_history", [])
+    if isinstance(history, list):
+        parts.append(" ".join(history))
+    else:
+        parts.append(str(history))
+    history_details = payload.get("medical_history_details", "")
+    if history_details:
+        parts.append(history_details)
+    locations = payload.get("location", [])
+    if isinstance(locations, list):
+        parts.append(" ".join(locations))
+    else:
+        parts.append(str(locations))
     return " | ".join(part for part in parts if part)
 
 
@@ -110,7 +139,7 @@ def score_user(
     similarities = np.dot(embeddings, user_embedding)
     intensity = int(payload.get("intensity", 3))
     duration = payload.get("duration", "")
-    location = payload.get("location", "")
+    location = payload.get("location", [])
 
     scored = []
     for row, sim in zip(referential, similarities):
