@@ -16,153 +16,210 @@ def main():
         "**Warning**: This tool is for informational purposes only. It is not a substitute for professional medical diagnosis. If you experience severe or persistent symptoms, consult a doctor immediately."
     )
 
-    referential_path = Path("data/processed/medical_referential.csv")
+    # Sélecteur de langue
+    lang = st.selectbox("Language / Langue", ["English", "Français"], index=0)
+    if lang == "Français":
+        referential_path = Path("data/processed/medical_referential_fr.csv")
+    else:
+        referential_path = Path("data/processed/medical_referential.csv")
     referential = load_referential(referential_path)
 
     def required_label(text):
         st.markdown(f"{text} <span style='color:red'>*</span>", unsafe_allow_html=True)
 
-    required_label("Describe your situation in your own words")
+    # Dictionnaire de traduction
+    translations = {
+        "en": {
+            "describe": "Describe your situation in your own words",
+            "describe_ph": "Example: headache with nausea since yesterday...",
+            "intensity": "Intensity of pain/discomfort (1 = low, 5 = very high)",
+            "duration": "Duration",
+            "duration_opts": [
+                "Less than 24 hours",
+                "1-3 days",
+                "4-7 days",
+                "1-4 weeks",
+                "More than 1 month",
+            ],
+            "location": "Location / body area (select all that apply)",
+            "location_opts": [
+                "Head / Skull", "Eyes", "Ears", "Nose / Throat", "Chest / Thorax", "Abdomen / Belly", "Back", "Arms / Hands", "Legs / Feet", "Skin", "Generalized / Whole Body", "Other"
+            ],
+            "specify_other": "Specify other location",
+            "specify_other_ph": "Example: neck, jaw, pelvis...",
+            "history": "Do you have any of the following medical conditions or risk factors? (multiple choices possible)",
+            "history_opts": [
+                "Heart problems / Hypertension", "Diabetes", "Respiratory problems / Asthma", "Known allergies", "Chronic digestive problems", "Autoimmune diseases", "Cancer history", "Neurological disorders", "Kidney problems", "Recent surgical operations", "Current medication treatment", "No particular medical history"
+            ],
+            "specify_condition": "Specify your condition",
+            "specify_condition_ph": "Example: type 2 diabetes, seasonal asthma...",
+            "trigger": "When do symptoms appear or worsen?",
+            "trigger_opts": [
+                "None of the options", "During physical effort / exercise", "At rest / during night", "After meals", "When lying down / standing up", "During stressful situations", "Upon contact with certain substances (food, allergens...)", "In cold / hot weather"
+            ],
+            "trigger_detail": "Specify if trigger exists",
+            "trigger_detail_ph": "Example: after long screen time, during travel...",
+            "analyze": "Analyze",
+            "response_captured": "Response captured.",
+            "top_reco": "Top recommendations",
+            "computing": "Computing similarities...",
+            "please_complete": "Please complete:",
+            "no_history_info": "'No particular medical history' was chosen.",
+            "table_specialty": "Specialty",
+            "table_disease": "Best-matching disease",
+            "table_similarity": "Similarity",
+            "table_score": "Score",
+            "longer_desc": "Please provide a longer description to compute recommendations.",
+            "footer": "**EFREI Project - Generative AI & Semantic Analysis 2025**  \nRAG System with SBERT + Gemini 2.0 Flash | Medical Orientation Prototype"
+        },
+        "fr": {
+            "describe": "Décrivez votre situation avec vos propres mots",
+            "describe_ph": "Exemple : mal de tête avec nausées depuis hier...",
+            "intensity": "Intensité de la douleur/gêne (1 = faible, 5 = très forte)",
+            "duration": "Durée",
+            "duration_opts": [
+                "Moins de 24 heures",
+                "1-3 jours",
+                "4-7 jours",
+                "1-4 semaines",
+                "Plus d'un mois",
+            ],
+            "location": "Localisation / zone du corps (sélection multiple possible)",
+            "location_opts": [
+                "Tête / Crâne", "Yeux", "Oreilles", "Nez / Gorge", "Poitrine / Thorax", "Abdomen / Ventre", "Dos", "Bras / Mains", "Jambes / Pieds", "Peau", "Généralisé / Tout le corps", "Autre"
+            ],
+            "specify_other": "Précisez une autre localisation",
+            "specify_other_ph": "Exemple : cou, mâchoire, bassin...",
+            "history": "Avez-vous l'une des conditions médicales ou facteurs de risque suivants ? (choix multiples possibles)",
+            "history_opts": [
+                "Problèmes cardiaques / Hypertension", "Diabète", "Problèmes respiratoires / Asthme", "Allergies connues", "Problèmes digestifs chroniques", "Maladies auto-immunes", "Antécédents de cancer", "Troubles neurologiques", "Problèmes rénaux", "Opérations chirurgicales récentes", "Traitement médicamenteux en cours", "Aucun antécédent médical particulier"
+            ],
+            "specify_condition": "Précisez votre condition",
+            "specify_condition_ph": "Exemple : diabète de type 2, asthme saisonnier...",
+            "trigger": "Quand les symptômes apparaissent-ils ou s'aggravent-ils ?",
+            "trigger_opts": [
+                "Aucune des options", "Lors d'un effort physique / exercice", "Au repos / pendant la nuit", "Après les repas", "En position allongée / debout", "En situation de stress", "Au contact de certaines substances (aliments, allergènes...)", "Par temps froid / chaud"
+            ],
+            "trigger_detail": "Précisez si un facteur déclenchant existe",
+            "trigger_detail_ph": "Exemple : après un temps d'écran prolongé, lors d'un voyage...",
+            "analyze": "Analyser",
+            "response_captured": "Réponse enregistrée.",
+            "top_reco": "Meilleures recommandations",
+            "computing": "Calcul des similarités...",
+            "please_complete": "Veuillez compléter :",
+            "no_history_info": "'Aucun antécédent médical particulier' a été choisi.",
+            "table_specialty": "Spécialité",
+            "table_disease": "Pathologie la plus proche",
+            "table_similarity": "Similarité",
+            "table_score": "Score",
+            "longer_desc": "Merci de fournir une description plus détaillée pour obtenir des recommandations.",
+            "footer": "**Projet EFREI - IA Générative & Analyse Sémantique 2025**  \nSystème RAG avec SBERT + Gemini 2.0 Flash | Prototype d'orientation médicale"
+        }
+    }
+    t = translations["fr" if lang == "Français" else "en"]
+
+    required_label(t["describe"])
     description = st.text_area(
-        "Describe your situation in your own words",
-        placeholder="Example: headache with nausea since yesterday...",
+        t["describe"],
+        placeholder=t["describe_ph"],
         label_visibility="collapsed",
     )
 
-    required_label("Intensity of pain/discomfort (1 = low, 5 = very high)")
+    required_label(t["intensity"])
     intensity = st.radio(
-        "Intensity of pain/discomfort (1 = low, 5 = very high)",
+        t["intensity"],
         [1, 2, 3, 4, 5],
         horizontal=True,
         label_visibility="collapsed",
     )
     
-    required_label("Duration")
+    required_label(t["duration"])
     duration = st.selectbox(
-        "Duration",
-        [
-            "Less than 24 hours",
-            "1-3 days",
-            "4-7 days",
-            "1-4 weeks",
-            "More than 1 month",
-        ],
+        t["duration"],
+        t["duration_opts"],
         label_visibility="collapsed",
     )
 
-    location_options = [
-        "Head / Skull",
-        "Eyes",
-        "Ears",
-        "Nose / Throat",
-        "Chest / Thorax",
-        "Abdomen / Belly",
-        "Back",
-        "Arms / Hands",
-        "Legs / Feet",
-        "Skin",
-        "Generalized / Whole Body",
-        "Other",
-    ]
-    required_label("Location / body area (select all that apply)")
+    location_options = t["location_opts"]
+    required_label(t["location"])
     location_choice = st.multiselect(
-        "Location / body area (select all that apply)",
+        t["location"],
         location_options,
         label_visibility="collapsed",
     )
     location_other = ""
-    if "Other" in location_choice:
-        required_label("Specify other location")
+    other_label = "Other" if lang == "English" else "Autre"
+    if other_label in location_choice:
+        required_label(t["specify_other"])
         location_other = st.text_input(
-            "Specify other location",
-            placeholder="Example: neck, jaw, pelvis...",
+            t["specify_other"],
+            placeholder=t["specify_other_ph"],
             label_visibility="collapsed",
         )
-    location = [loc for loc in location_choice if loc != "Other"]
+    location = [loc for loc in location_choice if loc != other_label]
     if location_other.strip():
         location.append(location_other.strip())
 
-    history_options = [
-        "Heart problems / Hypertension",
-        "Diabetes",
-        "Respiratory problems / Asthma",
-        "Known allergies",
-        "Chronic digestive problems",
-        "Autoimmune diseases",
-        "Cancer history",
-        "Neurological disorders",
-        "Kidney problems",
-        "Recent surgical operations",
-        "Current medication treatment",
-        "No particular medical history",
-    ]
+    history_options = t["history_opts"]
     def enforce_medical_history():
         selected = st.session_state.get("medical_history", [])
-        if "No particular medical history" in selected and len(selected) > 1:
-            st.session_state["medical_history"] = ["No particular medical history"]
+        none_label = "No particular medical history" if lang == "English" else "Aucun antécédent médical particulier"
+        if none_label in selected and len(selected) > 1:
+            st.session_state["medical_history"] = [none_label]
             st.session_state["medical_history_locked"] = True
         else:
             st.session_state["medical_history_locked"] = False
 
-    required_label(
-        "Do you have any of the following medical conditions or risk factors? (multiple choices possible)"
-    )
+    required_label(t["history"])
     medical_history = st.multiselect(
-        "Do you have any of the following medical conditions or risk factors? (multiple choices possible)",
+        t["history"],
         history_options,
         key="medical_history",
         on_change=enforce_medical_history,
         label_visibility="collapsed",
     )
     if st.session_state.get("medical_history_locked"):
-        st.info("'No particular medical history' was chosen.")
+        st.info(t["no_history_info"])
     medical_history_details = ""
-    if medical_history and "No particular medical history" not in medical_history:
-        required_label("Specify your condition")
+    none_label = "No particular medical history" if lang == "English" else "Aucun antécédent médical particulier"
+    if medical_history and none_label not in medical_history:
+        required_label(t["specify_condition"])
         medical_history_details = st.text_input(
-            "Specify your condition",
-            placeholder="Example: type 2 diabetes, seasonal asthma...",
+            t["specify_condition"],
+            placeholder=t["specify_condition_ph"],
             label_visibility="collapsed",
         )
 
-    required_label("When do symptoms appear or worsen?")
+    required_label(t["trigger"])
     trigger_factor = st.selectbox(
-        "When do symptoms appear or worsen?",
-        [   
-            "None of the options",
-            "During physical effort / exercise",
-            "At rest / during night",
-            "After meals",
-            "When lying down / standing up",
-            "During stressful situations",
-            "Upon contact with certain substances (food, allergens...)",
-            "In cold / hot weather",
-        ],
+        t["trigger"],
+        t["trigger_opts"],
         label_visibility="collapsed",
     )
     trigger_details = ""
-    if trigger_factor == "None of the options":
+    none_trigger = t["trigger_opts"][0]
+    if trigger_factor == none_trigger:
         trigger_details = st.text_input(
-            "Specify if trigger exists",
-            placeholder="Example: after long screen time, during travel...",
+            t["trigger_detail"],
+            placeholder=t["trigger_detail_ph"],
         )
 
     missing = []
     if not description.strip():
-        missing.append("Description")
+        missing.append(t["describe"])
     if not location:
-        missing.append("Location")
-    if "Other" in location_choice and not location_other.strip():
-        missing.append("Other location detail")
+        missing.append(t["location"])
+    if other_label in location_choice and not location_other.strip():
+        missing.append(t["specify_other"])
     if not medical_history:
-        missing.append("Medical history")
-    if medical_history and "No particular medical history" not in medical_history:
+        missing.append(t["history"])
+    if medical_history and none_label not in medical_history:
         if not medical_history_details.strip():
-            missing.append("Medical history details")
+            missing.append(t["specify_condition"])
     if missing:
-        st.info(f"Please complete: {', '.join(missing)}")
+        st.info(f"{t['please_complete']} {', '.join(missing)}")
 
-    submitted = st.button("Analyze", disabled=bool(missing))
+    submitted = st.button(t["analyze"], disabled=bool(missing))
     if submitted:
         payload = {
             "description": description,
@@ -175,19 +232,19 @@ def main():
             "medical_history_details": medical_history_details,
         }
 
-        st.success("Response captured.")
-        st.subheader("Top recommendations")
-        with st.spinner("Computing similarities..."):
+        st.success(t["response_captured"])
+        st.subheader(t["top_reco"])
+        with st.spinner(t["computing"]):
             results = score_user(payload, referential)
 
         if results:
             st.table(
                 [
                     {
-                        "Specialty": item["specialite"],
-                        "Best-matching disease": item["pathologie"],
-                        "Similarity": round(item["similarity"], 3),
-                        "Score": round(item["score"], 3),
+                        t["table_specialty"]: item["specialite"],
+                        t["table_disease"]: item["pathologie"],
+                        t["table_similarity"]: round(item["similarity"], 3),
+                        t["table_score"]: round(item["score"], 3),
                     }
                     for item in results
                 ]
@@ -195,15 +252,12 @@ def main():
             for item in results:
                 st.caption(f"{item['specialite']}: {item['explanation']}")
         else:
-            st.warning("Please provide a longer description to compute recommendations.")
-
+            st.warning(t["longer_desc"])
 
     # Footer
     st.markdown("---")
-    st.caption("""
-    **EFREI Project - Generative AI & Semantic Analysis 2025**  
-    RAG System with SBERT + Gemini 2.0 Flash | Medical Orientation Prototype
-    """)
+    st.caption(t["footer"])
+
 
 
 if __name__ == "__main__":
