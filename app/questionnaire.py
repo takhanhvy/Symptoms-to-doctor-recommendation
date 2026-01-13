@@ -37,15 +37,6 @@ def main():
         "en": {
             "describe": "Describe your situation in your own words",
             "describe_ph": "Example: headache with nausea since yesterday...",
-            "intensity": "Intensity of pain/discomfort (1 = low, 5 = very high)",
-            "duration": "Duration",
-            "duration_opts": [
-                "Less than 24 hours",
-                "1-3 days",
-                "4-7 days",
-                "1-4 weeks",
-                "More than 1 month",
-            ],
             "location": "Location / body area (select all that apply)",
             "location_opts": [
                 "Head / Skull", "Eyes", "Ears", "Nose / Throat", "Chest / Thorax", "Abdomen / Belly", "Back", "Arms / Hands", "Legs / Feet", "Skin", "Generalized / Whole Body", "Other"
@@ -130,43 +121,79 @@ def main():
     t = translations["fr" if lang == "Français" else "en"]
 
     required_label(t["describe"])
-    description = st.text_area(
-        t["describe"],
-        placeholder=t["describe_ph"],
-        label_visibility="collapsed",
-    )
-
-    required_label(t["intensity"])
-    intensity = st.radio(
-        t["intensity"],
-        [1, 2, 3, 4, 5],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-    
-    required_label(t["duration"])
-    duration = st.selectbox(
-        t["duration"],
-        t["duration_opts"],
-        label_visibility="collapsed",
-    )
-
-    location_options = t["location_opts"]
-    required_label(t["location"])
-    location_choice = st.multiselect(
-        t["location"],
-        location_options,
-        label_visibility="collapsed",
-    )
-    location_other = ""
-    other_label = "Other" if lang == "English" else "Autre"
-    if other_label in location_choice:
-        required_label(t["specify_other"])
-        location_other = st.text_input(
-            t["specify_other"],
-            placeholder=t["specify_other_ph"],
+    # En anglais, concaténer location et history à la description
+    if lang == "English":
+        location_options = t["location_opts"]
+        required_label(t["location"])
+        location_choice = st.multiselect(
+            t["location"],
+            location_options,
             label_visibility="collapsed",
         )
+        location_other = ""
+        other_label = "Other"
+        if other_label in location_choice:
+            required_label(t["specify_other"])
+            location_other = st.text_input(
+                t["specify_other"],
+                placeholder=t["specify_other_ph"],
+                label_visibility="collapsed",
+            )
+        location = [loc for loc in location_choice if loc != other_label]
+        if location_other.strip():
+            location.append(location_other.strip())
+        history_options = t["history_opts"]
+        required_label(t["history"])
+        medical_history = st.multiselect(
+            t["history"],
+            history_options,
+            key="medical_history",
+            label_visibility="collapsed",
+        )
+        # Concatène tout dans la description
+        concat_desc = description.strip()
+        if location:
+            concat_desc += "\nLocation: " + ", ".join(location)
+        if medical_history:
+            concat_desc += "\nMedical history: " + ", ".join(medical_history)
+        description = concat_desc
+        # On ne demande plus intensity ni duration
+        intensity = None
+        duration = None
+    else:
+        required_label(t["intensity"])
+        intensity = st.radio(
+            t["intensity"],
+            [1, 2, 3, 4, 5],
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+        required_label(t["duration"])
+        duration = st.selectbox(
+            t["duration"],
+            t["duration_opts"],
+            label_visibility="collapsed",
+        )
+
+
+    # Ne pas réafficher les widgets location/history en anglais (déjà gérés et concaténés dans la description ci-dessus)
+    if lang != "English":
+        location_options = t["location_opts"]
+        required_label(t["location"])
+        location_choice = st.multiselect(
+            t["location"],
+            location_options,
+            label_visibility="collapsed",
+        )
+        location_other = ""
+        other_label = "Autre"
+        if other_label in location_choice:
+            required_label(t["specify_other"])
+            location_other = st.text_input(
+                t["specify_other"],
+                placeholder=t["specify_other_ph"],
+                label_visibility="collapsed",
+            )
     location = [loc for loc in location_choice if loc != other_label]
     if location_other.strip():
         location.append(location_other.strip())
