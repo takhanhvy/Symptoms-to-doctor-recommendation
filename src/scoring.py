@@ -248,6 +248,7 @@ def score_user(
         )
     print("------------------------\n")
 
+    # Calculer scored AVANT le debug Gemini
     scored = []
     for row, sim in zip(referential, similarities):
         score = weighted_score(float(sim), intensity, duration, location)
@@ -263,6 +264,25 @@ def score_user(
                 ),
             }
         )
+
+    # DEBUG : Afficher l'analyse générée par Gemini pour ce payload
+    try:
+        from .scoring import build_augmented_prompt, generate_gemini_response
+    except ImportError:
+        # fallback si import relatif échoue (exécution directe)
+        from src.scoring import build_augmented_prompt, generate_gemini_response
+    try:
+        # Langue détectée grossièrement (FR si duration ou location en FR)
+        fr_markers = ["fr", "mois", "semaines", "jours", "heures", "tête", "abdomen", "ventre", "peau", "généralisé"]
+        lang = "fr" if any(isinstance(x, str) and any(m in x.lower() for m in fr_markers) for x in [duration] + (location if isinstance(location, list) else [location])) else "en"
+        prompt = build_augmented_prompt(payload, scored[:top_k], lang=lang)
+        print("\n--- DEBUG GEMINI ANALYSE ---")
+        print("Prompt envoyé à Gemini :\n", prompt)
+        gemini_text = generate_gemini_response(prompt)
+        print("Réponse Gemini :\n", gemini_text)
+        print("-----------------------------\n")
+    except Exception as e:
+        print(f"[DEBUG] Erreur lors de l'appel Gemini : {e}")
 
     best_by_specialty: dict[str, dict] = {}
     for item in scored:
@@ -295,22 +315,24 @@ def build_augmented_prompt(user_payload: dict, matched_results: list[dict], lang
     )
 
     if lang == "fr":
-        prompt = f"""Tu es un assistant médical. Analyse les symptômes de l'utilisateur et les pathologies identifiées par le système RAG.
+        prompt = f"""Génère une explication d'orientation médicale concise et professionnelle (3-4 phrases). Inclure : raisonnement, niveau d'urgence, prochaines étapes.
 
-**Symptômes décrits par l'utilisateur:**
+Tu es un assistant médical. Analyse les symptômes de l'utilisateur et les pathologies identifiées par le système RAG.
+
+**Symptômes décrits par l'utilisateur :**
 {user_desc}
 
-**Informations complémentaires:**
-- Intensité: {intensity}/5
-- Durée: {duration}
-- Localisation: {locations_str}
-- Antécédents médicaux: {history_str}
-- Facteur déclenchant: {trigger}
+**Informations complémentaires :**
+- Intensité : {intensity}/5
+- Durée : {duration}
+- Localisation : {locations_str}
+- Antécédents médicaux : {history_str}
+- Facteur déclenchant : {trigger}
 
-**Pathologies identifiées par similarité sémantique (top matches):**
+**Pathologies identifiées par similarité sémantique (top matches) :**
 {pathologies_context}
 
-**Instructions:**
+**Instructions détaillées :**
 1. Explique brièvement pourquoi ces pathologies ont été identifiées comme pertinentes.
 2. Indique quel spécialiste consulter en priorité.
 3. Donne des conseils généraux (sans remplacer un avis médical).
@@ -318,7 +340,9 @@ def build_augmented_prompt(user_payload: dict, matched_results: list[dict], lang
 
 Réponds de manière concise et professionnelle en français."""
     else:
-        prompt = f"""You are a medical assistant. Analyze the user's symptoms and the pathologies identified by the RAG system.
+        prompt = f"""Generate a concise, professional medical orientation explanation (3-4 sentences). Include: reasoning, urgency level, and next steps.
+
+You are a medical assistant. Analyze the user's symptoms and the pathologies identified by the RAG system.
 
 **User-described symptoms:**
 {user_desc}
@@ -333,7 +357,7 @@ Réponds de manière concise et professionnelle en français."""
 **Pathologies identified by semantic similarity (top matches):**
 {pathologies_context}
 
-**Instructions:**
+**Detailed instructions:**
 1. Briefly explain why these pathologies were identified as relevant.
 2. Indicate which specialist to consult first.
 3. Provide general advice (without replacing medical opinion).
@@ -344,7 +368,7 @@ Respond concisely and professionally in English."""
     return prompt
 
 
-def generate_gemini_response(prompt: str, model_name: str | None = None, temperature: float = 0.3, max_output_tokens: int = 512, max_retries: int = 3) -> str:
+def generate_gemini_response(prompt: str, model_name: str | None = None, temperature: float = 0.3, max_output_tokens: int = 4096, max_retries: int = 3) -> str:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY environment variable is not set")
