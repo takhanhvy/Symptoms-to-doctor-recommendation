@@ -121,6 +121,11 @@ def main():
     t = translations["fr" if lang == "Français" else "en"]
 
     required_label(t["describe"])
+    description = st.text_area(
+        t["describe"],
+        placeholder=t["describe_ph"],
+        label_visibility="collapsed",
+    )
     # En anglais, concaténer location et history à la description
     if lang == "English":
         location_options = t["location_opts"]
