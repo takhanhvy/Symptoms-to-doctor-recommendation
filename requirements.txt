@@ -5,3 +5,4 @@ numpy
 google-genai
 python-dotenv
 matplotlib
+seaborn

@@ -126,105 +126,61 @@ def main():
         placeholder=t["describe_ph"],
         label_visibility="collapsed",
     )
-    # En anglais, concaténer location et history à la description
-    if lang == "English":
-        location_options = t["location_opts"]
-        required_label(t["location"])
-        location_choice = st.multiselect(
-            t["location"],
-            location_options,
-            label_visibility="collapsed",
-        )
-        location_other = ""
-        other_label = "Other"
-        if other_label in location_choice:
-            required_label(t["specify_other"])
-            location_other = st.text_input(
-                t["specify_other"],
-                placeholder=t["specify_other_ph"],
-                label_visibility="collapsed",
-            )
-        location = [loc for loc in location_choice if loc != other_label]
-        if location_other.strip():
-            location.append(location_other.strip())
-        history_options = t["history_opts"]
-        required_label(t["history"])
-        medical_history = st.multiselect(
-            t["history"],
-            history_options,
-            key="medical_history",
-            label_visibility="collapsed",
-        )
-        # Concatène tout dans la description
-        concat_desc = description.strip()
-        if location:
-            concat_desc += "\nLocation: " + ", ".join(location)
-        if medical_history:
-            concat_desc += "\nMedical history: " + ", ".join(medical_history)
-        description = concat_desc
-        # On ne demande plus intensity ni duration
-        intensity = None
-        duration = None
-    else:
-        required_label(t["intensity"])
-        intensity = st.radio(
-            t["intensity"],
-            [1, 2, 3, 4, 5],
-            horizontal=True,
-            label_visibility="collapsed",
-        )
-        required_label(t["duration"])
-        duration = st.selectbox(
-            t["duration"],
-            t["duration_opts"],
-            label_visibility="collapsed",
-        )
 
-
-    # Ne pas réafficher les widgets location/history en anglais (déjà gérés et concaténés dans la description ci-dessus)
-    if lang != "English":
-        location_options = t["location_opts"]
-        required_label(t["location"])
-        location_choice = st.multiselect(
-            t["location"],
-            location_options,
+    location_options = t["location_opts"]
+    required_label(t["location"])
+    location_choice = st.multiselect(
+        t["location"],
+        location_options,
+        key=f"location_{lang}",
+        label_visibility="collapsed",
+    )
+    location_other = ""
+    other_label = "Other" if lang == "English" else "Autre"
+    if other_label in location_choice:
+        required_label(t["specify_other"])
+        location_other = st.text_input(
+            t["specify_other"],
+            placeholder=t["specify_other_ph"],
             label_visibility="collapsed",
         )
-        location_other = ""
-        other_label = "Autre"
-        if other_label in location_choice:
-            required_label(t["specify_other"])
-            location_other = st.text_input(
-                t["specify_other"],
-                placeholder=t["specify_other_ph"],
-                label_visibility="collapsed",
-            )
     location = [loc for loc in location_choice if loc != other_label]
     if location_other.strip():
         location.append(location_other.strip())
 
     history_options = t["history_opts"]
+
     def enforce_medical_history():
-        selected = st.session_state.get("medical_history", [])
-        none_label = "No particular medical history" if lang == "English" else "Aucun antécédent médical particulier"
+        key = f"medical_history_{lang}"
+        selected = st.session_state.get(key, [])
+        none_label = (
+            "No particular medical history"
+            if lang == "English"
+            else "Aucun antécédent médical particulier"
+        )
         if none_label in selected and len(selected) > 1:
-            st.session_state["medical_history"] = [none_label]
-            st.session_state["medical_history_locked"] = True
+            st.session_state[key] = [none_label]
+            st.session_state[f"medical_history_locked_{lang}"] = True
         else:
-            st.session_state["medical_history_locked"] = False
+            st.session_state[f"medical_history_locked_{lang}"] = False
 
     required_label(t["history"])
     medical_history = st.multiselect(
         t["history"],
         history_options,
-        key="medical_history",
+        key=f"medical_history_{lang}",
         on_change=enforce_medical_history,
         label_visibility="collapsed",
     )
-    if st.session_state.get("medical_history_locked"):
+    if st.session_state.get(f"medical_history_locked_{lang}"):
         st.info(t["no_history_info"])
+
     medical_history_details = ""
-    none_label = "No particular medical history" if lang == "English" else "Aucun antécédent médical particulier"
+    none_label = (
+        "No particular medical history"
+        if lang == "English"
+        else "Aucun antécédent médical particulier"
+    )
     if medical_history and none_label not in medical_history:
         required_label(t["specify_condition"])
         medical_history_details = st.text_input(
@@ -232,6 +188,26 @@ def main():
             placeholder=t["specify_condition_ph"],
             label_visibility="collapsed",
         )
+
+    # On ne demande plus intensity ni duration
+    intensity = None
+    duration = None
+
+    # Concatène location + history à la description (entrée utilisateur)
+    concat_desc = description.strip()
+    if location:
+        concat_desc += (
+            "\nLocation: " + ", ".join(location)
+            if lang == "English"
+            else "\nLocalisation : " + ", ".join(location)
+        )
+    if medical_history:
+        concat_desc += (
+            "\nMedical history: " + ", ".join(medical_history)
+            if lang == "English"
+            else "\nAntécédents médicaux : " + ", ".join(medical_history)
+        )
+    description = concat_desc
 
     required_label(t["trigger"])
     trigger_factor = st.selectbox(
@@ -315,7 +291,106 @@ def main():
             ax.set_ylim(0, 100)
             ax.set_title("Comparaison des spécialités (similarité)")
             st.pyplot(fig)
+        
+            import pandas as pd
+            import seaborn as sns
 
+            # Récupérer les pathologies et spécialités du top 3
+            top_pathos = [(item['specialite'], item['pathologie']) for item in top_specialties]
+
+            # Charger le référentiel en DataFrame pour faciliter le traitement
+            ref_df = pd.read_csv('data/processed/medical_referential.csv', sep=';')
+
+            # Filtrer les lignes du référentiel correspondant au top 3
+            rows = []
+            for spec, patho in top_pathos:
+                row = ref_df[(ref_df['Speciality'] == spec) & (ref_df['Disease'] == patho)]
+                if not row.empty:
+                    rows.append(row.iloc[0])
+
+            # Extraire tous les symptômes uniques du top 3
+            all_symptoms = set()
+            symptoms_per_patho = []
+            for row in rows:
+                symptoms = [s.strip() for s in str(row[col_symptoms]).split(',')]
+                symptoms_per_patho.append(symptoms)
+                all_symptoms.update(symptoms)
+            all_symptoms = sorted(all_symptoms)
+
+            import numpy as np
+            # Récupérer les pathologies, spécialités et similarités du top 3
+            top_pathos = [(item['specialite'], item['pathologie'], item['similarity']) for item in top_specialties]
+
+            # Charger le référentiel en DataFrame (FR ou EN)
+            import difflib
+            if lang == "Français":
+                ref_path = 'data/processed/medical_referential_fr.csv'
+            else:
+                ref_path = 'data/processed/medical_referential.csv'
+            ref_df = pd.read_csv(ref_path, sep=';')
+            # Mapping dynamique des colonnes pour FR/EN
+            colmap = {k.lower(): k for k in ref_df.columns}
+            col_speciality = colmap.get("speciality") or colmap.get("specialite")
+            col_disease = colmap.get("disease") or colmap.get("maladie")
+            col_symptoms = colmap.get("symptoms") or colmap.get("symptomes")
+            ref_df[col_speciality] = ref_df[col_speciality].astype(str).str.strip().str.lower()
+            ref_df[col_disease] = ref_df[col_disease].astype(str).str.strip().str.lower()
+
+            # Filtrer les lignes du référentiel correspondant au top 3 (spécialité+patho ou patho seul, puis fuzzy matching)
+            rows = []
+            all_diseases = ref_df[col_disease].unique()
+            for spec, patho, sim in top_pathos:
+                # Recherche stricte (spécialité + pathologie)
+                row = ref_df[
+                    (ref_df[col_speciality] == spec.strip().lower()) &
+                    (ref_df[col_disease] == patho.strip().lower())
+                ]
+                # Si rien trouvé, matcher sur la pathologie seule
+                if row.empty:
+                    row = ref_df[ref_df[col_disease] == patho.strip().lower()]
+                # Si toujours rien, fuzzy matching sur la pathologie seule
+                if row.empty:
+                    match = difflib.get_close_matches(patho.strip().lower(), all_diseases, n=1, cutoff=0.6)
+                    if match:
+                        row = ref_df[ref_df[col_disease] == match[0]]
+                if not row.empty:
+                    r = row.iloc[0].copy()
+                    r['similarity'] = sim
+                    rows.append(r)
+
+            # Extraire tous les symptômes uniques du top 3
+            all_symptoms = set()
+            symptoms_per_patho = []
+            for row in rows:
+                symptoms = [s.strip() for s in str(row[col_symptoms]).split(',')]
+                symptoms_per_patho.append(symptoms)
+                all_symptoms.update(symptoms)
+            all_symptoms = sorted(all_symptoms)
+
+            # Construire la matrice (score de similarité si le symptôme est présent, sinon np.nan)
+            data = []
+            for row, symptoms in zip(rows, symptoms_per_patho):
+                sim = row['similarity']
+                data.append([sim if s in symptoms else np.nan for s in all_symptoms])
+
+            heatmap_df = pd.DataFrame(
+                data,
+                index=[f"{row[col_speciality].title()} ({row[col_disease].title()})" for row in rows],
+                columns=all_symptoms
+            )
+
+            # Afficher la heatmap
+            import matplotlib.pyplot as plt
+            plt.figure(figsize=(min(12, 1+len(all_symptoms)*0.6), 2+len(rows)))
+            if heatmap_df.empty or len(heatmap_df.columns) == 0 or len(heatmap_df.index) == 0:
+                st.info("Aucune donnée symptomatique à afficher pour la heatmap des top 3 spécialités.")
+            else:
+                sns.heatmap(heatmap_df, cmap='YlOrRd', cbar=True, linewidths=.5, annot=True, fmt='.2f')
+                plt.title("Score de similarité par symptôme pour les top 3 spécialités")
+                plt.xlabel("Symptômes")
+                plt.ylabel("Spécialité (Pathologie)")
+                plt.xticks(rotation=45, ha='right')
+                st.pyplot(plt.gcf())
             # Generation (G) - Gemini response
             st.subheader(t["ai_analysis"])
             cached_hash = st.session_state.get("gemini_payload_hash")

@@ -68,119 +68,10 @@ def embed_referential(model_name: str, corpus_key: str, corpus: tuple[str, ...])
     return embeddings
 
 
-def duration_factor(duration: str) -> float:
-    mapping = {
-        "Less than 24 hours": 0.9,
-        "1-3 days": 1.0,
-        "4-7 days": 1.05,
-        "1-4 weeks": 1.1,
-        "More than 1 month": 1.15,
-        "Moins de 24 heures": 0.9,
-        "1-3 jours": 1.0,
-        "4-7 jours": 1.05,
-        "1-4 semaines": 1.1,
-        "Plus d'un mois": 1.15,
-    }
-    return mapping.get(duration, 1.0)
-
-
-def weighted_score(similarity: float, intensity: int, duration: str, locations) -> float:
-    intensity_factor = 0.85 + 0.05 * intensity
-    duration_weight = duration_factor(duration)
-    location_items = []
-    if isinstance(locations, str):
-        location_items = [loc.strip().lower() for loc in locations.split(",") if loc.strip()]
-    elif isinstance(locations, list):
-        location_items = [str(loc).strip().lower() for loc in locations if str(loc).strip()]
-
-    generic_locations = {"generalized / whole body", "généralisé / tout le corps"}
-    specific_locations = [
-        loc for loc in location_items if loc and loc not in generic_locations
-    ]
-    if not specific_locations:
-        location_factor = 1.0
-    else:
-        location_factor = min(1.1, 1.05 + 0.02 * max(0, len(specific_locations) - 1))
-    return similarity * intensity_factor * duration_weight * location_factor
 
 
 def location_relevance_factor(row: ReferentialRow, locations) -> float:
-    location_items = []
-    if isinstance(locations, str):
-        location_items = [loc.strip().lower() for loc in locations.split(",") if loc.strip()]
-    elif isinstance(locations, list):
-        location_items = [str(loc).strip().lower() for loc in locations if str(loc).strip()]
-
-    generic_locations = {"generalized / whole body", "généralisé / tout le corps"}
-    location_items = [loc for loc in location_items if loc and loc not in generic_locations]
-    if not location_items:
-        return 1.0
-
-    keys = set()
-    for loc in location_items:
-        if "abdomen" in loc or "belly" in loc or "ventre" in loc:
-            keys.add("abdomen")
-        elif "back" in loc or loc == "dos":
-            keys.add("back")
-        elif "chest" in loc or "thorax" in loc or "poitrine" in loc:
-            keys.add("chest")
-        elif "skin" in loc or "peau" in loc:
-            keys.add("skin")
-
-    if not keys:
-        return 1.0
-
-    def matches_keyword(text: str, kw: str) -> bool:
-        if not kw:
-            return False
-        if len(kw) <= 3 and kw.isalpha():
-            return re.search(rf"\b{re.escape(kw)}\b", text) is not None
-        return kw in text
-
-    keywords = {
-        "abdomen": {
-            "abdomen",
-            "abdominal",
-            "belly",
-            "stomach",
-            "ventre",
-            "estomac",
-            "intestin",
-            "gastro",
-            "naus",
-            "vom",
-            "diarr",
-            "rectum",
-            "anus",
-            "anal",
-            "urine",
-            "urinaire",
-            "miction",
-            "uriner",
-            "vessie",
-            "pelv",
-            "bassin",
-        },
-        "back": {"back", "dos", "dors", "lomb", "cerv", "colonne", "spine", "vertèbr", "vertebr", "rein", "reins", "kidney"},
-        "chest": {"chest", "thorax", "poitrine", "thorac", "heart", "card", "poumon", "lung"},
-        "skin": {"skin", "peau", "cutan", "rash", "éruption", "eruption", "démange", "itch"},
-    }
-
-    key_weights = {
-        "abdomen": 1.3,
-        "back": 1.0,
-        "chest": 1.0,
-        "skin": 1.0,
-    }
-
-    row_text = " ".join([row.pathologie, row.symptoms, row.description]).lower()
-    total_weight = sum(key_weights.get(key, 1.0) for key in keys)
-    matched_weight = 0.0
-    for key in keys:
-        if any(matches_keyword(row_text, kw) for kw in keywords.get(key, set())):
-            matched_weight += key_weights.get(key, 1.0)
-    ratio = (matched_weight / total_weight) if total_weight else 1.0
-    return 0.55 + 0.6 * ratio
+    return 1.0
 
 
 def build_user_text(payload: dict) -> str:
@@ -227,16 +118,8 @@ def score_user(
     user_embedding = model.encode([user_text], normalize_embeddings=True)[0]
 
     similarities = np.dot(embeddings, user_embedding)
-    intensity = int(payload.get("intensity", 3))
-    duration = payload.get("duration", "")
-    location = payload.get("location", [])
 
     raw_similarities = similarities.copy()
-
-    location_factors = np.array(
-        [location_relevance_factor(row, location) for row in referential], dtype=float
-    )
-    similarities = similarities * location_factors
 
     # Debug: Afficher les similarités et les textes du corpus
     top_idx = np.argsort(similarities)[::-1][:5]
@@ -244,24 +127,18 @@ def score_user(
     print(f"Texte utilisateur: {user_text}")
     for idx in top_idx:
         print(
-            f"[{idx}] sim={similarities[idx]:.4f} (raw={raw_similarities[idx]:.4f} loc={location_factors[idx]:.2f}) : {corpus[idx]}"
+            f"[{idx}] sim={similarities[idx]:.4f} (raw={raw_similarities[idx]:.4f}) : {corpus[idx]}"
         )
     print("------------------------\n")
 
     # Calculer scored AVANT le debug Gemini
     scored = []
     for row, sim in zip(referential, similarities):
-        score = weighted_score(float(sim), intensity, duration, location)
         scored.append(
             {
                 "specialite": row.specialite,
                 "pathologie": row.pathologie,
                 "similarity": float(sim),
-                "score": float(score),
-                "explanation": (
-                    "Proximity between your description and the reference symptoms. "
-                    f"Score weighted by intensity ({intensity}), duration, and location."
-                ),
             }
         )
 
@@ -272,9 +149,7 @@ def score_user(
         # fallback si import relatif échoue (exécution directe)
         from src.scoring import build_augmented_prompt, generate_gemini_response
     try:
-        # Langue détectée grossièrement (FR si duration ou location en FR)
-        fr_markers = ["fr", "mois", "semaines", "jours", "heures", "tête", "abdomen", "ventre", "peau", "généralisé"]
-        lang = "fr" if any(isinstance(x, str) and any(m in x.lower() for m in fr_markers) for x in [duration] + (location if isinstance(location, list) else [location])) else "en"
+        lang = "fr" if payload.get("lang") == "fr" else "en"
         prompt = build_augmented_prompt(payload, scored[:top_k], lang=lang)
         print("\n--- DEBUG GEMINI ANALYSE ---")
         print("Prompt envoyé à Gemini :\n", prompt)
@@ -287,11 +162,12 @@ def score_user(
     best_by_specialty: dict[str, dict] = {}
     for item in scored:
         key = item["specialite"]
-        if key not in best_by_specialty or item["score"] > best_by_specialty[key]["score"]:
+        if key not in best_by_specialty or item["similarity"] > best_by_specialty[key]["similarity"]:
             best_by_specialty[key] = item
 
-    results = sorted(best_by_specialty.values(), key=lambda x: x["score"], reverse=True)
+    results = sorted(best_by_specialty.values(), key=lambda x: x["similarity"], reverse=True)
     return results[:top_k]
+
 
 
 def build_augmented_prompt(user_payload: dict, matched_results: list[dict], lang: str = "en") -> str:
@@ -300,68 +176,33 @@ def build_augmented_prompt(user_payload: dict, matched_results: list[dict], lang
     based on user symptoms and retrieved pathologies.
     """
     user_desc = user_payload.get("description", "")
-    intensity = user_payload.get("intensity", 3)
-    duration = user_payload.get("duration", "")
-    locations = user_payload.get("location", [])
-    medical_history = user_payload.get("medical_history", [])
-    trigger = user_payload.get("trigger_factor", "")
-
-    locations_str = ", ".join(locations) if isinstance(locations, list) else str(locations)
-    history_str = ", ".join(medical_history) if isinstance(medical_history, list) else str(medical_history)
-
     pathologies_context = "\n".join(
-        f"- {r['pathologie']} ({r['specialite']}) – score: {r['score']:.2f}"
+        f"- {r['pathologie']} ({r['specialite']}) – similarity: {r['similarity']:.2f}"
         for r in matched_results
     )
 
     if lang == "fr":
         prompt = f"""Génère une explication d'orientation médicale concise et professionnelle (3-4 phrases). Inclure : raisonnement, niveau d'urgence, prochaines étapes.
 
-Tu es un assistant médical. Analyse les symptômes de l'utilisateur et les pathologies identifiées par le système RAG.
+Tu es un assistant médical. Analyse les symptômes décrits et les meilleures correspondances du système.
 
 **Symptômes décrits par l'utilisateur :**
 {user_desc}
 
-**Informations complémentaires :**
-- Intensité : {intensity}/5
-- Durée : {duration}
-- Localisation : {locations_str}
-- Antécédents médicaux : {history_str}
-- Facteur déclenchant : {trigger}
-
 **Pathologies identifiées par similarité sémantique (top matches) :**
 {pathologies_context}
-
-**Instructions détaillées :**
-1. Explique brièvement pourquoi ces pathologies ont été identifiées comme pertinentes.
-2. Indique quel spécialiste consulter en priorité.
-3. Donne des conseils généraux (sans remplacer un avis médical).
-4. Précise les signes d'alerte nécessitant une consultation urgente.
 
 Réponds de manière concise et professionnelle en français."""
     else:
         prompt = f"""Generate a concise, professional medical orientation explanation (3-4 sentences). Include: reasoning, urgency level, and next steps.
 
-You are a medical assistant. Analyze the user's symptoms and the pathologies identified by the RAG system.
+You are a medical assistant. Analyze the user's described symptoms and the top similarity matches.
 
 **User-described symptoms:**
 {user_desc}
 
-**Additional information:**
-- Intensity: {intensity}/5
-- Duration: {duration}
-- Location: {locations_str}
-- Medical history: {history_str}
-- Trigger factor: {trigger}
-
 **Pathologies identified by semantic similarity (top matches):**
 {pathologies_context}
-
-**Detailed instructions:**
-1. Briefly explain why these pathologies were identified as relevant.
-2. Indicate which specialist to consult first.
-3. Provide general advice (without replacing medical opinion).
-4. Specify warning signs requiring urgent consultation.
 
 Respond concisely and professionally in English."""
 
