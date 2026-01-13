@@ -1,13 +1,18 @@
 import json
+import hashlib
 import sys
 from pathlib import Path
 import streamlit as st
+from dotenv import load_dotenv
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from src.scoring import load_referential, score_user
+# Load .env file from app/ directory
+load_dotenv(ROOT / "app" / ".env", override=True)
+
+from src.scoring import load_referential, score_user, build_augmented_prompt, generate_gemini_response
 
 def main():
     st.set_page_config(page_title="Medical Orientation Questionnaire")
@@ -70,7 +75,10 @@ def main():
             "table_similarity": "Similarity",
             "table_score": "Score",
             "longer_desc": "Please provide a longer description to compute recommendations.",
-            "footer": "**EFREI Project - Generative AI & Semantic Analysis 2025**  \nRAG System with SBERT + Gemini 2.0 Flash | Medical Orientation Prototype"
+            "ai_analysis": "AI-Powered Analysis",
+            "generating": "Generating personalized recommendations...",
+            "gemini_error": "Could not generate AI response. Please check your API key, quota, or try again later (service overloaded).",
+            "footer": "**EFREI Project - Generative AI & Semantic Analysis 2025**  \nRAG System with SBERT + Gemini 2.5 Flash | Medical Orientation Prototype"
         },
         "fr": {
             "describe": "Décrivez votre situation avec vos propres mots",
@@ -113,7 +121,10 @@ def main():
             "table_similarity": "Similarité",
             "table_score": "Score",
             "longer_desc": "Merci de fournir une description plus détaillée pour obtenir des recommandations.",
-            "footer": "**Projet EFREI - IA Générative & Analyse Sémantique 2025**  \nSystème RAG avec SBERT + Gemini 2.0 Flash | Prototype d'orientation médicale"
+            "ai_analysis": "Analyse par IA",
+            "generating": "Génération des recommandations personnalisées...",
+            "gemini_error": "Impossible de générer la réponse IA. Vérifiez votre clé API, votre quota, ou réessayez plus tard (service surchargé).",
+            "footer": "**Projet EFREI - IA Générative & Analyse Sémantique 2025**  \nSystème RAG avec SBERT + Gemini 2.5 Flash | Prototype d'orientation médicale"
         }
     }
     t = translations["fr" if lang == "Français" else "en"]
@@ -232,10 +243,18 @@ def main():
             "medical_history_details": medical_history_details,
         }
 
+        payload_key = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+        payload_hash = hashlib.sha256(payload_key.encode("utf-8")).hexdigest()
+
         st.success(t["response_captured"])
         st.subheader(t["top_reco"])
         with st.spinner(t["computing"]):
-            results = score_user(payload, referential)
+            model_name = (
+                "paraphrase-multilingual-MiniLM-L12-v2"
+                if lang == "Français"
+                else "all-MiniLM-L6-v2"
+            )
+            results = score_user(payload, referential, model_name=model_name)
 
         if results:
             st.table(
@@ -249,8 +268,24 @@ def main():
                     for item in results
                 ]
             )
-            for item in results:
-                st.caption(f"{item['specialite']}: {item['explanation']}")
+
+            # Generation (G) - Gemini response
+            st.subheader(t["ai_analysis"])
+            cached_hash = st.session_state.get("gemini_payload_hash")
+            cached_response = st.session_state.get("gemini_response")
+            if cached_hash == payload_hash and cached_response:
+                st.markdown(cached_response)
+            else:
+                with st.spinner(t["generating"]):
+                    try:
+                        lang_code = "fr" if lang == "Français" else "en"
+                        augmented_prompt = build_augmented_prompt(payload, results, lang=lang_code)
+                        gemini_response = generate_gemini_response(augmented_prompt)
+                        st.session_state["gemini_payload_hash"] = payload_hash
+                        st.session_state["gemini_response"] = gemini_response
+                        st.markdown(gemini_response)
+                    except Exception as e:
+                        st.error(f"{t['gemini_error']} ({e})")
         else:
             st.warning(t["longer_desc"])
 
