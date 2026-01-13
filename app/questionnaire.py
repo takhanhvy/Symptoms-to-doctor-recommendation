@@ -257,17 +257,32 @@ def main():
             results = score_user(payload, referential, model_name=model_name)
 
         if results:
-            st.table(
-                [
-                    {
-                        t["table_specialty"]: item["specialite"],
-                        t["table_disease"]: item["pathologie"],
-                        t["table_similarity"]: round(item["similarity"], 3),
-                        t["table_score"]: round(item["score"], 3),
-                    }
-                    for item in results
-                ]
-            )
+            # Affichage sous forme de bullet points : top 3 spécialités
+            top_specialties = results[:3]
+            st.markdown("**Top 3 Spécialités recommandées :**")
+            for idx, item in enumerate(top_specialties, 1):
+                st.markdown(f"- **{item['specialite']}** : {item['pathologie']} (score: {round(item['similarity']*100, 1)}%)")
+
+            # Radar chart des spécialités et leur similarité
+            import matplotlib.pyplot as plt
+            import numpy as np
+
+            labels = [item['specialite'] for item in top_specialties]
+            values = [item['similarity']*100 for item in top_specialties]
+            num_vars = len(labels)
+            angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+            # Boucler pour fermer le polygone
+            values += values[:1]
+            angles += angles[:1]
+            labels += labels[:1]
+
+            fig, ax = plt.subplots(figsize=(5,5), subplot_kw=dict(polar=True))
+            ax.plot(angles, values, 'o-', linewidth=2)
+            ax.fill(angles, values, alpha=0.25)
+            ax.set_thetagrids(np.degrees(angles), labels)
+            ax.set_ylim(0, 100)
+            ax.set_title("Comparaison des spécialités (similarité)")
+            st.pyplot(fig)
 
             # Generation (G) - Gemini response
             st.subheader(t["ai_analysis"])
