@@ -270,9 +270,9 @@ def main():
         if results:
             # Affichage sous forme de bullet points : top 3 spécialités
             score_explain = (
-                "**Note sur le score** : le pourcentage affiché correspond à un **score de similarité sémantique** (similarité cosinus) calculé entre l'embedding de votre description et l'embedding des éléments du référentiel (SBERT). Plus le score est élevé, plus le texte est jugé proche."
+                "**Information** : le pourcentage affiché correspond à un **score de similarité sémantique** (similarité cosinus) calculé entre l'embedding de votre description et l'embedding des éléments du référentiel (SBERT). Plus le score est élevé, plus le texte est jugé proche."
                 if lang == "Français"
-                else "**Score note**: the percentage shown is a **semantic similarity score** (cosine similarity) computed between the embedding of your description and the embedding of the referential items (SBERT). Higher means the texts are considered closer."
+                else "**Information**: the percentage shown is a **semantic similarity score** (cosine similarity) computed between the embedding of your description and the embedding of the referential items (SBERT). Higher means the texts are considered closer."
             )
             st.info(score_explain)
             top_specialties = results[:3]
@@ -293,12 +293,18 @@ def main():
             angles += angles[:1]
             labels += labels[:1]
 
-            fig, ax = plt.subplots(figsize=(3,3), subplot_kw=dict(polar=True))
+            fig, ax = plt.subplots(figsize=(1.5,1.5), subplot_kw=dict(polar=True))
             ax.plot(angles, values, 'o-', linewidth=2)
             ax.fill(angles, values, alpha=0.25)
             ax.set_thetagrids(np.degrees(angles), labels)
+            ax.tick_params(axis="x", labelsize=5)
+            ax.tick_params(axis="y", labelsize=5)
             ax.set_ylim(0, 100)
-            ax.set_title("Comparaison des spécialités (similarité)")
+            # ax.set_title("Comparaison des spécialités (similarité)")
+            if lang == "Français":
+                st.markdown("**Comparaison des spécialités basée sur le score de similarité :**")
+            else:
+                st.markdown("**Comparison of specialties based on similarity score :**")
             st.pyplot(fig)
         
             import pandas as pd
@@ -356,14 +362,18 @@ def main():
                 st.info("Aucune donnée symptomatique à afficher pour la heatmap des top 3 spécialités.")
             else:
                 sns.heatmap(heatmap_df, cmap='Reds', cbar=True, linewidths=.5, fmt='.2f')
-                plt.title(
-                    "Matrice des symptômes pour le top 3 des spécialités"
-                    if lang == "Français"
-                    else "Matrix of symptoms for the top 3 specialties"
-                )
+                # plt.title(
+                #     "Matrice des symptômes pour le top 3 des spécialités"
+                #     if lang == "Français"
+                #     else "Matrix of symptoms for the top 3 specialties"
+                # )
                 plt.xlabel("Symptômes")
                 plt.ylabel("Spécialité")
                 plt.xticks(rotation=45, ha='right')
+                if lang == "Français":
+                    st.markdown("**Matrice des symptômes pour le top 3 des spécialités :**")
+                else:
+                    st.markdown("**Matrix of symptoms for the top 3 specialties :**")
                 st.pyplot(plt.gcf())
             # Generation (G) - Gemini response
             st.subheader(t["ai_analysis"])
@@ -382,15 +392,15 @@ def main():
                         st.markdown(gemini_response)
                     except Exception as e:
                         st.error(f"{t['gemini_error']} ({e})")
+            disclaimer_text = (
+                "**Avertissement**: Cet outil est fourni à titre informatif uniquement. Il ne remplace pas un diagnostic médical professionnel. En cas de symptômes sévères ou persistants, consultez un médecin sans délai."
+                if lang == "Français"
+                    else "**Warning**: This tool is for informational purposes only. It is not a substitute for professional medical diagnosis. If you experience severe or persistent symptoms, consult a doctor immediately."
+            )
+            st.warning(disclaimer_text)
         else:
             st.warning(t["longer_desc"])
 
-        disclaimer_text = (
-        "**Avertissement**: Cet outil est fourni à titre informatif uniquement. Il ne remplace pas un diagnostic médical professionnel. En cas de symptômes sévères ou persistants, consultez un médecin sans délai."
-        if lang == "Français"
-        else "**Warning**: This tool is for informational purposes only. It is not a substitute for professional medical diagnosis. If you experience severe or persistent symptoms, consult a doctor immediately."
-    )
-    st.warning(disclaimer_text)
     # Footer
     st.markdown("---")
     st.caption(t["footer"])
