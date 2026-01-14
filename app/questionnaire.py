@@ -17,12 +17,15 @@ from src.scoring import load_referential, score_user, build_augmented_prompt, ge
 def main():
     st.set_page_config(page_title="Medical Orientation Questionnaire")
     st.title("Medical Orientation Questionnaire")
-    st.warning(
-        "**Warning**: This tool is for informational purposes only. It is not a substitute for professional medical diagnosis. If you experience severe or persistent symptoms, consult a doctor immediately."
-    )
 
     # Sélecteur de langue
     lang = st.selectbox("Language / Langue", ["English", "Français"], index=0)
+    disclaimer_text = (
+        "**Avertissement**: Cet outil est fourni à titre informatif uniquement. Il ne remplace pas un diagnostic médical professionnel. En cas de symptômes sévères ou persistants, consultez un médecin sans délai."
+        if lang == "Français"
+        else "**Warning**: This tool is for informational purposes only. It is not a substitute for professional medical diagnosis. If you experience severe or persistent symptoms, consult a doctor immediately."
+    )
+    st.warning(disclaimer_text)
     if lang == "Français":
         referential_path = Path("data/processed/medical_referential_fr.csv")
     else:
@@ -69,7 +72,7 @@ def main():
             "ai_analysis": "AI-Powered Analysis",
             "generating": "Generating personalized recommendations...",
             "gemini_error": "Could not generate AI response. Please check your API key, quota, or try again later (service overloaded).",
-            "footer": "**EFREI Project - Generative AI & Semantic Analysis 2025**  \nRAG System with SBERT + Gemini 2.5 Flash | Medical Orientation Prototype"
+            "footer": "**EFREI Project - Generative AI & Semantic Analysis 2025**  \nRAG System with SBERT + Gemini 2.5 Flash | Medical Orientation Prototype| \nMADOUNGOU Colombe Alice, Vy Khanh TA"
         },
         "fr": {
             "describe": "Décrivez votre situation avec vos propres mots",
@@ -108,14 +111,14 @@ def main():
             "please_complete": "Veuillez compléter :",
             "no_history_info": "'Aucun antécédent médical particulier' a été choisi.",
             "table_specialty": "Spécialité",
-            "table_disease": "Pathologie la plus proche",
+            "table_disease": "Symptômes (référentiel)",
             "table_similarity": "Similarité",
             "table_score": "Score",
             "longer_desc": "Merci de fournir une description plus détaillée pour obtenir des recommandations.",
             "ai_analysis": "Analyse par IA",
             "generating": "Génération des recommandations personnalisées...",
             "gemini_error": "Impossible de générer la réponse IA. Vérifiez votre clé API, votre quota, ou réessayez plus tard (service surchargé).",
-            "footer": "**Projet EFREI - IA Générative & Analyse Sémantique 2025**  \nSystème RAG avec SBERT + Gemini 2.5 Flash | Prototype d'orientation médicale"
+            "footer": "**Projet EFREI - IA Générative & Analyse Sémantique 2025**  \nSystème RAG avec SBERT + Gemini 2.5 Flash | Prototype d'orientation médicale\nRAG System with SBERT + Gemini 2.5 Flash | Medical Orientation Prototype | \nMADOUNGOU Colombe Alice, Vy Khanh TA"
         }
     }
     t = translations["fr" if lang == "Français" else "en"]
@@ -266,10 +269,16 @@ def main():
 
         if results:
             # Affichage sous forme de bullet points : top 3 spécialités
+            score_explain = (
+                "**Note sur le score** : le pourcentage affiché correspond à un **score de similarité sémantique** (similarité cosinus) calculé entre l'embedding de votre description et l'embedding des éléments du référentiel (SBERT). Plus le score est élevé, plus le texte est jugé proche."
+                if lang == "Français"
+                else "**Score note**: the percentage shown is a **semantic similarity score** (cosine similarity) computed between the embedding of your description and the embedding of the referential items (SBERT). Higher means the texts are considered closer."
+            )
+            st.info(score_explain)
             top_specialties = results[:3]
             st.markdown("**Top 3 Spécialités recommandées :**")
             for idx, item in enumerate(top_specialties, 1):
-                st.markdown(f"- **{item['specialite']}** : {item['pathologie']} (score: {round(item['similarity']*100, 1)}%)")
+                st.markdown(f"- **{item['specialite']}**  (score: {round(item['similarity']*100, 1)}%)\n> {item['symptoms']}")
 
             # Radar chart des spécialités et leur similarité
             import matplotlib.pyplot as plt
@@ -284,7 +293,7 @@ def main():
             angles += angles[:1]
             labels += labels[:1]
 
-            fig, ax = plt.subplots(figsize=(5,5), subplot_kw=dict(polar=True))
+            fig, ax = plt.subplots(figsize=(3,3), subplot_kw=dict(polar=True))
             ax.plot(angles, values, 'o-', linewidth=2)
             ax.fill(angles, values, alpha=0.25)
             ax.set_thetagrids(np.degrees(angles), labels)
@@ -295,16 +304,25 @@ def main():
             import pandas as pd
             import seaborn as sns
 
-            # Récupérer les pathologies et spécialités du top 3
-            top_pathos = [(item['specialite'], item['pathologie']) for item in top_specialties]
+            # Récupérer les spécialités du top 3
+            top_specialties = results[:3]
+            top_pathos = [item['specialite'] for item in top_specialties]
 
             # Charger le référentiel en DataFrame pour faciliter le traitement
             ref_df = pd.read_csv('data/processed/medical_referential.csv', sep=';')
+            if lang == "Français":
+                ref_df = pd.read_csv('data/processed/medical_referential_fr.csv', sep=';')
 
             # Filtrer les lignes du référentiel correspondant au top 3
+            # Mapping dynamique des colonnes pour FR/EN (doit être AVANT toute boucle d'usage)
+            colmap = {k.lower(): k for k in ref_df.columns}
+            col_speciality = colmap.get("speciality") or colmap.get("specialite")
+            col_symptoms = colmap.get("symptoms") or colmap.get("symptomes")
+
+            # On ne filtre plus que sur la spécialité
             rows = []
-            for spec, patho in top_pathos:
-                row = ref_df[(ref_df['Speciality'] == spec) & (ref_df['Disease'] == patho)]
+            for spec in top_pathos:
+                row = ref_df[ref_df[col_speciality] == spec]
                 if not row.empty:
                     rows.append(row.iloc[0])
 
@@ -318,77 +336,33 @@ def main():
             all_symptoms = sorted(all_symptoms)
 
             import numpy as np
-            # Récupérer les pathologies, spécialités et similarités du top 3
-            top_pathos = [(item['specialite'], item['pathologie'], item['similarity']) for item in top_specialties]
-
-            # Charger le référentiel en DataFrame (FR ou EN)
-            import difflib
-            if lang == "Français":
-                ref_path = 'data/processed/medical_referential_fr.csv'
-            else:
-                ref_path = 'data/processed/medical_referential.csv'
-            ref_df = pd.read_csv(ref_path, sep=';')
-            # Mapping dynamique des colonnes pour FR/EN
-            colmap = {k.lower(): k for k in ref_df.columns}
-            col_speciality = colmap.get("speciality") or colmap.get("specialite")
-            col_disease = colmap.get("disease") or colmap.get("maladie")
-            col_symptoms = colmap.get("symptoms") or colmap.get("symptomes")
-            ref_df[col_speciality] = ref_df[col_speciality].astype(str).str.strip().str.lower()
-            ref_df[col_disease] = ref_df[col_disease].astype(str).str.strip().str.lower()
-
-            # Filtrer les lignes du référentiel correspondant au top 3 (spécialité+patho ou patho seul, puis fuzzy matching)
-            rows = []
-            all_diseases = ref_df[col_disease].unique()
-            for spec, patho, sim in top_pathos:
-                # Recherche stricte (spécialité + pathologie)
-                row = ref_df[
-                    (ref_df[col_speciality] == spec.strip().lower()) &
-                    (ref_df[col_disease] == patho.strip().lower())
-                ]
-                # Si rien trouvé, matcher sur la pathologie seule
-                if row.empty:
-                    row = ref_df[ref_df[col_disease] == patho.strip().lower()]
-                # Si toujours rien, fuzzy matching sur la pathologie seule
-                if row.empty:
-                    match = difflib.get_close_matches(patho.strip().lower(), all_diseases, n=1, cutoff=0.6)
-                    if match:
-                        row = ref_df[ref_df[col_disease] == match[0]]
-                if not row.empty:
-                    r = row.iloc[0].copy()
-                    r['similarity'] = sim
-                    rows.append(r)
-
-            # Extraire tous les symptômes uniques du top 3
-            all_symptoms = set()
-            symptoms_per_patho = []
-            for row in rows:
-                symptoms = [s.strip() for s in str(row[col_symptoms]).split(',')]
-                symptoms_per_patho.append(symptoms)
-                all_symptoms.update(symptoms)
-            all_symptoms = sorted(all_symptoms)
-
-            # Construire la matrice (score de similarité si le symptôme est présent, sinon np.nan)
+            # Construire la matrice (score de similarité par symptôme)
+            spec_to_similarity = {item["specialite"]: float(item["similarity"]) for item in top_specialties}
             data = []
             for row, symptoms in zip(rows, symptoms_per_patho):
-                sim = row['similarity']
+                sim = spec_to_similarity.get(row[col_speciality], np.nan)
                 data.append([sim if s in symptoms else np.nan for s in all_symptoms])
 
             heatmap_df = pd.DataFrame(
                 data,
-                index=[f"{row[col_speciality].title()} ({row[col_disease].title()})" for row in rows],
-                columns=all_symptoms
+                index=[f"{row[col_speciality]}" for row in rows],
+                columns=all_symptoms,
             )
 
             # Afficher la heatmap
             import matplotlib.pyplot as plt
-            plt.figure(figsize=(min(12, 1+len(all_symptoms)*0.6), 2+len(rows)))
+            plt.figure(figsize=(min(12, 1 + len(all_symptoms) * 0.6), 2 + len(rows)))
             if heatmap_df.empty or len(heatmap_df.columns) == 0 or len(heatmap_df.index) == 0:
                 st.info("Aucune donnée symptomatique à afficher pour la heatmap des top 3 spécialités.")
             else:
-                sns.heatmap(heatmap_df, cmap='YlOrRd', cbar=True, linewidths=.5, annot=True, fmt='.2f')
-                plt.title("Score de similarité par symptôme pour les top 3 spécialités")
+                sns.heatmap(heatmap_df, cmap='Reds', cbar=True, linewidths=.5, fmt='.2f')
+                plt.title(
+                    "Matrice des symptômes pour le top 3 des spécialités"
+                    if lang == "Français"
+                    else "Matrix of symptoms for the top 3 specialties"
+                )
                 plt.xlabel("Symptômes")
-                plt.ylabel("Spécialité (Pathologie)")
+                plt.ylabel("Spécialité")
                 plt.xticks(rotation=45, ha='right')
                 st.pyplot(plt.gcf())
             # Generation (G) - Gemini response
@@ -411,6 +385,12 @@ def main():
         else:
             st.warning(t["longer_desc"])
 
+        disclaimer_text = (
+        "**Avertissement**: Cet outil est fourni à titre informatif uniquement. Il ne remplace pas un diagnostic médical professionnel. En cas de symptômes sévères ou persistants, consultez un médecin sans délai."
+        if lang == "Français"
+        else "**Warning**: This tool is for informational purposes only. It is not a substitute for professional medical diagnosis. If you experience severe or persistent symptoms, consult a doctor immediately."
+    )
+    st.warning(disclaimer_text)
     # Footer
     st.markdown("---")
     st.caption(t["footer"])

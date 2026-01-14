@@ -67,9 +67,7 @@ def build_referential(raw_dir):
         rows.append(
             {
                 "Speciality": specialty,
-                "Disease": disease,
                 "Symptoms": ", ".join(sorted(symptoms)),
-                "Description": descriptions.get(disease, ""),
             }
         )
     return rows

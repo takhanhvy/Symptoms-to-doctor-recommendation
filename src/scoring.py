@@ -16,44 +16,28 @@ import os
 @dataclass(frozen=True)
 class ReferentialRow:
     specialite: str
-    pathologie: str
     symptoms: str
-    description: str
 
 
 def load_referential(path: Path) -> list[ReferentialRow]:
     rows: list[ReferentialRow] = []
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter=";")
-        # Support both EN and FR column names
         colmap = {k.lower(): k for k in reader.fieldnames}
         col_specialite = colmap.get("speciality") or colmap.get("specialite")
-        col_pathologie = colmap.get("disease") or colmap.get("maladie")
         col_symptoms = colmap.get("symptoms") or colmap.get("symptomes")
-        col_description = colmap.get("description")
         for row in reader:
             rows.append(
                 ReferentialRow(
                     specialite=row.get(col_specialite, "").strip(),
-                    pathologie=row.get(col_pathologie, "").strip(),
                     symptoms=row.get(col_symptoms, "").strip(),
-                    description=row.get(col_description, "").strip(),
                 )
             )
     return rows
 
 
 def build_corpus(rows: list[ReferentialRow]) -> list[str]:
-    corpus = []
-    for row in rows:
-        symptoms_text = row.symptoms or row.description
-        text = " | ".join(
-            part
-            for part in [row.pathologie, symptoms_text]
-            if part
-        )
-        corpus.append(text)
-    return corpus
+    return [f"{row.specialite} {row.symptoms}".strip() for row in rows]
 
 
 @lru_cache(maxsize=1)
@@ -137,7 +121,7 @@ def score_user(
         scored.append(
             {
                 "specialite": row.specialite,
-                "pathologie": row.pathologie,
+                "symptoms": row.symptoms,
                 "similarity": float(sim),
             }
         )
@@ -177,7 +161,7 @@ def build_augmented_prompt(user_payload: dict, matched_results: list[dict], lang
     """
     user_desc = user_payload.get("description", "")
     pathologies_context = "\n".join(
-        f"- {r['pathologie']} ({r['specialite']}) – similarity: {r['similarity']:.2f}"
+        f"- {r['specialite']} : {r['symptoms']} – similarity: {r['similarity']:.2f}"
         for r in matched_results
     )
 
