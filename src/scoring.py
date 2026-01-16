@@ -20,6 +20,7 @@ class ReferentialRow:
 
 
 def load_referential(path: Path) -> list[ReferentialRow]:
+    """Charge le referentiel medical depuis un CSV delimite par ';'."""
     rows: list[ReferentialRow] = []
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter=";")
@@ -37,16 +38,19 @@ def load_referential(path: Path) -> list[ReferentialRow]:
 
 
 def build_corpus(rows: list[ReferentialRow]) -> list[str]:
+    """Construit le corpus texte a partir des lignes du referentiel."""
     return [f"{row.specialite} {row.symptoms}".strip() for row in rows]
 
 
 @lru_cache(maxsize=1)
 def load_model(model_name: str) -> SentenceTransformer:
+    """Charge le modele de phrase avec cache."""
     return SentenceTransformer(model_name)
 
 
 @lru_cache(maxsize=4)
 def embed_referential(model_name: str, corpus_key: str, corpus: tuple[str, ...]):
+    """Genere les embeddings du corpus avec cache."""
     model = load_model(model_name)
     embeddings = model.encode(list(corpus), normalize_embeddings=True)
     return embeddings
@@ -55,10 +59,12 @@ def embed_referential(model_name: str, corpus_key: str, corpus: tuple[str, ...])
 
 
 def location_relevance_factor(row: ReferentialRow, locations) -> float:
+    """Facteur multiplicatif pour la pertinence par localisation (placeholder)."""
     return 1.0
 
 
 def build_user_text(payload: dict) -> str:
+    """Consolide les champs utilisateur en un seul texte pour le scoring."""
     parts = [
         payload.get("description", ""),
     ]
@@ -92,6 +98,7 @@ def score_user(
     model_name: str = "all-MiniLM-L6-v2",
     top_k: int = 3,
 ) -> list[dict]:
+    """Calcule les similarites et retourne les top specialites dedoublonnees."""
     user_text = build_user_text(payload)
     if not user_text:
         return []
@@ -105,7 +112,7 @@ def score_user(
 
     raw_similarities = similarities.copy()
 
-    # Debug: Afficher les similarités et les textes du corpus
+    # Debug: afficher les similarites et les textes du corpus
     top_idx = np.argsort(similarities)[::-1][:5]
     print("\n--- DEBUG SIMILARITES ---")
     print(f"Texte utilisateur: {user_text}")
@@ -115,7 +122,7 @@ def score_user(
         )
     print("------------------------\n")
 
-    # Calculer scored AVANT le debug Gemini
+    # Construire la liste scoree avant l'analyse Gemini
     scored = []
     for row, sim in zip(referential, similarities):
         scored.append(
@@ -126,11 +133,11 @@ def score_user(
             }
         )
 
-    # DEBUG : Afficher l'analyse générée par Gemini pour ce payload
+    # Debug: afficher l'analyse generee par Gemini pour ce payload
     try:
         from .scoring import build_augmented_prompt, generate_gemini_response
     except ImportError:
-        # fallback si import relatif échoue (exécution directe)
+        # fallback si import relatif echoue (execution directe)
         from src.scoring import build_augmented_prompt, generate_gemini_response
     try:
         lang = "fr" if payload.get("lang") == "fr" else "en"
@@ -156,8 +163,8 @@ def score_user(
 
 def build_augmented_prompt(user_payload: dict, matched_results: list[dict], lang: str = "en") -> str:
     """
-    Augmented Context Construction: build a structured prompt for the LLM
-    based on user symptoms and retrieved pathologies.
+    Construction du contexte augmente: prompt structure pour le LLM
+    base sur les symptomes utilisateur et les pathologies retrouvees.
     """
     user_desc = user_payload.get("description", "")
     pathologies_context = "\n".join(
@@ -194,6 +201,7 @@ Respond concisely and professionally in English."""
 
 
 def generate_gemini_response(prompt: str, model_name: str | None = None, temperature: float = 0.3, max_output_tokens: int = 4096, max_retries: int = 3) -> str:
+    """Appelle l'API Gemini avec retries et backoff."""
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY environment variable is not set")

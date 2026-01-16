@@ -9,16 +9,17 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-# Load .env file from app/ directory
+# Charge le fichier .env depuis le dossier app/.
 load_dotenv(ROOT / "app" / ".env", override=True)
 
 from src.scoring import load_referential, score_user, build_augmented_prompt, generate_gemini_response
 
 def main():
+    """Interface Streamlit du questionnaire d'orientation médicale."""
     st.set_page_config(page_title="Medical Orientation Questionnaire")
     st.title("Medical Orientation Questionnaire")
 
-    # Sélecteur de langue
+    # Sélecteur de langue + avertissement legal.
     lang = st.selectbox("Language / Langue", ["English", "Français"], index=0)
     disclaimer_text = (
         "**Avertissement**: Cet outil est fourni à titre informatif uniquement. Il ne remplace pas un diagnostic médical professionnel. En cas de symptômes sévères ou persistants, consultez un médecin sans délai."
@@ -33,9 +34,10 @@ def main():
     referential = load_referential(referential_path)
 
     def required_label(text):
+        """Ajoute une etoile rouge aux champs obligatoires."""
         st.markdown(f"{text} <span style='color:red'>*</span>", unsafe_allow_html=True)
 
-    # Dictionnaire de traduction
+    # Dictionnaire de traduction FR/EN.
     translations = {
         "en": {
             "describe": "Describe your situation in your own words",
@@ -154,6 +156,7 @@ def main():
     history_options = t["history_opts"]
 
     def enforce_medical_history():
+        """Force l'exclusion mutuelle quand 'aucun antecedent' est coche."""
         key = f"medical_history_{lang}"
         selected = st.session_state.get(key, [])
         none_label = (
@@ -192,11 +195,11 @@ def main():
             label_visibility="collapsed",
         )
 
-    # On ne demande plus intensity ni duration
+    # On ne demande plus intensity ni duration.
     intensity = None
     duration = None
 
-    # Concatène location + history à la description (entrée utilisateur)
+    # Concatene localisation + antecedents a la description.
     concat_desc = description.strip()
     if location:
         concat_desc += (
@@ -226,6 +229,7 @@ def main():
             placeholder=t["trigger_detail_ph"],
         )
 
+    # Validation des champs requis.
     missing = []
     if not description.strip():
         missing.append(t["describe"])
@@ -243,6 +247,7 @@ def main():
 
     submitted = st.button(t["analyze"], disabled=bool(missing))
     if submitted:
+        # Payload utilisateur pour scoring + cache Gemini.
         payload = {
             "description": description,
             "intensity": intensity,
@@ -268,7 +273,7 @@ def main():
             results = score_user(payload, referential, model_name=model_name)
 
         if results:
-            # Affichage sous forme de bullet points : top 3 spécialités
+            # Affichage des top recommandations + explication du score.
             score_explain = (
                 "**Information** : le pourcentage affiché correspond à un **score de similarité sémantique** (similarité cosinus) calculé entre l'embedding de votre description et l'embedding des éléments du référentiel (SBERT). Plus le score est élevé, plus le texte est jugé proche."
                 if lang == "Français"
@@ -280,7 +285,7 @@ def main():
             for idx, item in enumerate(top_specialties, 1):
                 st.markdown(f"- **{item['specialite']}**  (score: {round(item['similarity']*100, 1)}%)\n> {item['symptoms']}")
 
-            # Radar chart des spécialités et leur similarité
+            # Radar chart des specialites et leur similarite.
             import matplotlib.pyplot as plt
             import numpy as np
 
@@ -310,29 +315,29 @@ def main():
             import pandas as pd
             import seaborn as sns
 
-            # Récupérer les spécialités du top 3
+            # Recuperer les specialites du top 3.
             top_specialties = results[:3]
             top_pathos = [item['specialite'] for item in top_specialties]
 
-            # Charger le référentiel en DataFrame pour faciliter le traitement
+            # Charger le referentiel en DataFrame pour faciliter le traitement.
             ref_df = pd.read_csv('data/processed/medical_referential.csv', sep=';')
             if lang == "Français":
                 ref_df = pd.read_csv('data/processed/medical_referential_fr.csv', sep=';')
 
-            # Filtrer les lignes du référentiel correspondant au top 3
-            # Mapping dynamique des colonnes pour FR/EN (doit être AVANT toute boucle d'usage)
+            # Filtrer les lignes du referentiel correspondant au top 3.
+            # Mapping dynamique des colonnes pour FR/EN (doit etre avant toute boucle d'usage).
             colmap = {k.lower(): k for k in ref_df.columns}
             col_speciality = colmap.get("speciality") or colmap.get("specialite")
             col_symptoms = colmap.get("symptoms") or colmap.get("symptomes")
 
-            # On ne filtre plus que sur la spécialité
+            # On ne filtre plus que sur la specialite.
             rows = []
             for spec in top_pathos:
                 row = ref_df[ref_df[col_speciality] == spec]
                 if not row.empty:
                     rows.append(row.iloc[0])
 
-            # Extraire tous les symptômes uniques du top 3
+            # Extraire tous les symptomes uniques du top 3.
             all_symptoms = set()
             symptoms_per_patho = []
             for row in rows:
@@ -342,7 +347,7 @@ def main():
             all_symptoms = sorted(all_symptoms)
 
             import numpy as np
-            # Construire la matrice (score de similarité par symptôme)
+            # Construire la matrice (score de similarite par symptome).
             spec_to_similarity = {item["specialite"]: float(item["similarity"]) for item in top_specialties}
             data = []
             for row, symptoms in zip(rows, symptoms_per_patho):
@@ -355,7 +360,7 @@ def main():
                 columns=all_symptoms,
             )
 
-            # Afficher la heatmap
+            # Afficher la heatmap.
             import matplotlib.pyplot as plt
             plt.figure(figsize=(min(12, 1 + len(all_symptoms) * 0.6), 2 + len(rows)))
             if heatmap_df.empty or len(heatmap_df.columns) == 0 or len(heatmap_df.index) == 0:
@@ -375,7 +380,7 @@ def main():
                 else:
                     st.markdown("**Matrix of symptoms for the top 3 specialties :**")
                 st.pyplot(plt.gcf())
-            # Generation (G) - Gemini response
+            # Generation (G) - reponse Gemini avec cache.
             st.subheader(t["ai_analysis"])
             cached_hash = st.session_state.get("gemini_payload_hash")
             cached_response = st.session_state.get("gemini_response")
@@ -401,7 +406,7 @@ def main():
         else:
             st.warning(t["longer_desc"])
 
-    # Footer
+    # Footer.
     st.markdown("---")
     st.caption(t["footer"])
 

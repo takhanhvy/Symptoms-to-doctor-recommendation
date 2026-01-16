@@ -3,11 +3,13 @@ from collections import defaultdict
 from pathlib import Path
 
 
+# Corrections connues des libelles dans les jeux de donnees bruts.
 FIX_DISEASE = {
     "Dimorphic hemmorhoids(piles)": "Dimorphic hemorrhoids(piles)",
     "hepatitis A": "Hepatitis A",
 }
 
+# Normalisations des noms de specialites depuis les sources.
 FIX_SPECIALTY = {
     "Internal Medcine": "Internal Medicine",
     "Rheumatologists": "Rheumatologist",
@@ -17,11 +19,13 @@ FIX_SPECIALTY = {
 
 
 def read_csv(path, encoding):
+    """Charge un fichier CSV en liste de lignes."""
     with path.open("r", encoding=encoding, newline="") as handle:
         return list(csv.reader(handle))
 
 
 def norm(text, fixes=None, lower=False):
+    """Nettoie les espaces, applique les corrections, et met en minuscules si besoin."""
     text = " ".join(text.strip().split())
     if fixes:
         text = fixes.get(text, text)
@@ -31,6 +35,7 @@ def norm(text, fixes=None, lower=False):
 
 
 def build_referential(raw_dir):
+    """Construit les lignes du referentiel a partir des trois CSV sources."""
     original_rows = read_csv(raw_dir / "Original_Dataset_FR.csv", "utf-8-sig")
     description_rows = read_csv(raw_dir / "Disease_Description_FR.csv", "utf-8-sig")
     mapping_rows = read_csv(raw_dir / "Doctor_Versus_Disease_FR.csv", "utf-8")
@@ -74,6 +79,7 @@ def build_referential(raw_dir):
 
 
 def write_csv(rows, output_path):
+    """Ecrit les lignes dans un CSV delimite par des points-virgules."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=rows[0].keys(), delimiter=";")
@@ -82,6 +88,7 @@ def write_csv(rows, output_path):
 
 
 def main():
+    """Point d'entree pour generer le CSV du referentiel traite."""
     rows = build_referential(Path("data/raw"))
     write_csv(rows, Path("data/processed/medical_referential_fr.csv"))
     print(f"Wrote medical_referential_fr.csv with {len(rows)} rows.")
